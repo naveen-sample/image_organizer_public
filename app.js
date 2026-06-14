@@ -740,29 +740,54 @@ class GalleryApp {
             </div>
           `).join('')}
         </div>
-        <button class="btn btn--secondary btn--full" id="cancelUploadProcessBtn">Cancel Upload</button>
+        <div class="upload-actions" id="uploadActions">
+          <button class="btn btn--secondary btn--full" id="cancelUploadProcessBtn">Cancel Upload</button>
+        </div>
       </div>
     `;
 
-    document.getElementById('cancelUploadProcessBtn').addEventListener('click', () => {
+    const cancelBtn = document.getElementById('cancelUploadProcessBtn');
+    cancelBtn.addEventListener('click', () => {
       this.closeUploadModal();
       UI.Notify.info('Upload cancelled');
     });
 
     try {
-      await this.uploadManager.uploadFiles(this.state.upload.files, albumName, (filename, status, progress) => {
+      const result = await this.uploadManager.uploadFiles(this.state.upload.files, albumName, (filename, status, progress) => {
         this.updateUploadProgress(filename, status, progress);
       });
 
-      UI.Notify.success('All uploads complete!');
-      setTimeout(() => {
-        this.closeUploadModal();
-        if (this.currentScreen === 'album' && this.state.albums.selected === albumName) {
-          this.showAlbum(albumName);
-        } else {
-          this.showHomeScreen();
+      const errors = this.uploadManager.uploadQueue.filter(t => t.status === 'error');
+      const succeeded = this.uploadManager.uploadQueue.filter(t => t.status === 'completed');
+
+      const actions = document.getElementById('uploadActions');
+      if (actions) {
+        cancelBtn.remove();
+        const doneBtn = document.createElement('button');
+        doneBtn.className = 'btn btn--primary btn--full';
+        doneBtn.textContent = 'Done';
+        doneBtn.addEventListener('click', () => {
+          this.closeUploadModal();
+          if (this.currentScreen === 'album' && this.state.albums.selected === albumName) {
+            this.showAlbum(albumName);
+          } else {
+            this.showHomeScreen();
+          }
+        });
+        actions.appendChild(doneBtn);
+      }
+
+      if (errors.length > 0) {
+        const errorList = errors.map(e => `<div class="upload-error">${Utils.escapeHtml(e.file.name)}: ${Utils.escapeHtml(e.error || 'Failed')}</div>`).join('');
+        const summary = document.getElementById('uploadFileProgress');
+        if (summary) {
+          summary.innerHTML += `<div class="upload-errors"><p class="upload-error" style="font-weight:600;margin-bottom:6px">${errors.length} file(s) failed:</p>${errorList}</div>`;
         }
-      }, 1000);
+      }
+
+      if (succeeded.length > 0) {
+        UI.Notify.success(`${succeeded.length} file(s) uploaded successfully`);
+      }
     } catch (error) {
       UI.Notify.error(error.message || 'Upload failed');
     }
@@ -932,44 +957,50 @@ class UploadManager {
       error: null
     }));
 
-    await this.processUploadQueue(progressCallback);
+    return this.processUploadQueue(progressCallback);
   }
 
   async processUploadQueue(progressCallback) {
     const totalFiles = this.uploadQueue.length;
     let completedCount = 0;
+    let errorCount = 0;
 
     while (this.uploadQueue.length > 0 || this.currentUploads.size > 0) {
       while (this.uploadQueue.length > 0 && this.currentUploads.size < this.maxConcurrent) {
         const task = this.uploadQueue.shift();
-        this.uploadSingleFile(task, progressCallback);
+        this.uploadSingleFile(task, progressCallback).catch(() => {});
       }
 
       if (this.currentUploads.size > 0) {
-        await Promise.race(Array.from(this.currentUploads.values()));
+        const results = await Promise.race(Array.from(this.currentUploads.entries()).map(async ([id, promise]) => {
+          try {
+            await promise;
+            return { id, status: 'ok' };
+          } catch {
+            return { id, status: 'error' };
+          }
+        }));
+        if (results) {
+          this.currentUploads.delete(results.id);
+          if (results.status === 'ok') completedCount++;
+          else errorCount++;
+        }
       }
 
       if (progressCallback) {
-        const activeDone = Array.from(this.currentUploads.values()).filter(p => {
-          try { return p._done; } catch { return false; }
-        }).length;
-        completedCount = totalFiles - this.uploadQueue.length - this.currentUploads.size + activeDone;
-        const overallProgress = (completedCount / totalFiles) * 100;
+        const doneCount = completedCount + errorCount;
+        const overallProgress = totalFiles === 0 ? 100 : (doneCount / totalFiles) * 100;
         progressCallback('all', 'uploading', overallProgress);
       }
     }
+    return { completedCount, errorCount };
   }
 
   async uploadSingleFile(task, progressCallback) {
     const taskId = Utils.generateId();
     const promise = this.doUpload(task, taskId, progressCallback);
     this.currentUploads.set(taskId, promise);
-
-    try {
-      await promise;
-    } finally {
-      this.currentUploads.delete(taskId);
-    }
+    await promise;
   }
 
   async doUpload(task, taskId, progressCallback) {
@@ -1004,7 +1035,7 @@ class UploadManager {
       task.status = 'error';
       task.error = error.message;
       if (progressCallback) {
-        progressCallback(task.file.name, 'Failed', 0);
+        progressCallback(task.file.name, error.message || 'Failed', 0);
       }
       throw error;
     }

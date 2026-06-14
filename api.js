@@ -123,20 +123,21 @@ class GitHubAPI {
   }
 
   async uploadImage(albumName, filename, imageData) {
-    const path = `albums/${encodeURIComponent(albumName)}/${encodeURIComponent(filename)}`;
+    const urlPath = `albums/${encodeURIComponent(albumName)}/${encodeURIComponent(filename)}`;
+    const literalPath = `albums/${albumName}/${filename}`;
 
     if (imageData.byteLength > 1048576) {
-      return this.uploadLargeFile(path, filename, imageData);
+      return this.uploadLargeFile(literalPath, filename, imageData);
     }
 
-    return this.request('PUT', `/repos/${this.owner}/${this.privateRepo}/contents/${path}`, {
+    return this.request('PUT', `/repos/${this.owner}/${this.privateRepo}/contents/${urlPath}`, {
       message: `Upload: ${filename}`,
       content: this.arrayBufferToBase64(imageData),
       branch: 'main'
     });
   }
 
-  async uploadLargeFile(path, filename, imageData) {
+  async uploadLargeFile(literalPath, filename, imageData) {
     const base64Content = this.arrayBufferToBase64(imageData);
 
     const blob = await this.request('POST', `/repos/${this.owner}/${this.privateRepo}/git/blobs`, {
@@ -144,34 +145,46 @@ class GitHubAPI {
       encoding: 'base64'
     });
 
-    const ref = await this.request('GET', `/repos/${this.owner}/${this.privateRepo}/git/refs/heads/main`);
-    const commitSha = ref.object.sha;
+    const maxAttempts = 5;
+    let lastError;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const ref = await this.request('GET', `/repos/${this.owner}/${this.privateRepo}/git/refs/heads/main`);
+        const commitSha = ref.object.sha;
 
-    const commit = await this.request('GET', `/repos/${this.owner}/${this.privateRepo}/git/commits/${commitSha}`);
-    const baseTreeSha = commit.tree.sha;
+        const commit = await this.request('GET', `/repos/${this.owner}/${this.privateRepo}/git/commits/${commitSha}`);
+        const baseTreeSha = commit.tree.sha;
 
-    const newTree = await this.request('POST', `/repos/${this.owner}/${this.privateRepo}/git/trees`, {
-      base_tree: baseTreeSha,
-      tree: [
-        {
-          path,
-          mode: '100644',
-          type: 'blob',
-          sha: blob.sha
-        }
-      ]
-    });
+        const newTree = await this.request('POST', `/repos/${this.owner}/${this.privateRepo}/git/trees`, {
+          base_tree: baseTreeSha,
+          tree: [
+            {
+              path: literalPath,
+              mode: '100644',
+              type: 'blob',
+              sha: blob.sha
+            }
+          ]
+        });
 
-    const newCommit = await this.request('POST', `/repos/${this.owner}/${this.privateRepo}/git/commits`, {
-      message: `Upload: ${filename}`,
-      tree: newTree.sha,
-      parents: [commitSha]
-    });
+        const newCommit = await this.request('POST', `/repos/${this.owner}/${this.privateRepo}/git/commits`, {
+          message: `Upload: ${filename}`,
+          tree: newTree.sha,
+          parents: [commitSha]
+        });
 
-    return this.request('PATCH', `/repos/${this.owner}/${this.privateRepo}/git/refs/heads/main`, {
-      sha: newCommit.sha,
-      force: false
-    });
+        return this.request('PATCH', `/repos/${this.owner}/${this.privateRepo}/git/refs/heads/main`, {
+          sha: newCommit.sha,
+          force: attempt === maxAttempts - 1
+        });
+      } catch (error) {
+        lastError = error;
+        const msg = (error.message || '').toLowerCase();
+        if (!msg.includes('fast-forward') && !msg.includes('fast forward')) throw error;
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+      }
+    }
+    throw lastError;
   }
 
   async deleteFile(path, sha) {
