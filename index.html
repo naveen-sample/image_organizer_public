@@ -50,9 +50,17 @@
     </div>
   </header>
 
+  <!-- MOBILE MENU OVERLAY -->
+  <div id="mobileMenuOverlay" class="mobile-menu__overlay"></div>
+
   <!-- MOBILE MENU -->
   <nav id="mobileMenu" class="mobile-menu" aria-label="Navigation">
     <div class="mobile-menu__content">
+      <button id="closeMenuBtn" class="mobile-menu__close-btn" aria-label="Close menu">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
       <ul class="mobile-menu__list">
         <li><a href="#" class="mobile-menu__link" data-action="home">Home</a></li>
         <li><a href="#" class="mobile-menu__link" data-action="about">About</a></li>

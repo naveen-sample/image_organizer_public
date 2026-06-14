@@ -115,7 +115,7 @@ class GitHubAPI {
   }
 
   async getFileContent(path) {
-    const response = await this.request('GET', `/repos/${this.owner}/${this.privateRepo}/contents/${encodeURIComponent(path)}`);
+    const response = await this.request('GET', `/repos/${this.owner}/${this.privateRepo}/contents/${path}`);
     if (response.encoding === 'base64' && response.content) {
       return JSON.parse(atob(response.content));
     }
@@ -124,6 +124,11 @@ class GitHubAPI {
 
   async uploadImage(albumName, filename, imageData) {
     const path = `albums/${encodeURIComponent(albumName)}/${encodeURIComponent(filename)}`;
+
+    if (imageData.byteLength > 1048576) {
+      return this.uploadLargeFile(path, filename, imageData);
+    }
+
     return this.request('PUT', `/repos/${this.owner}/${this.privateRepo}/contents/${path}`, {
       message: `Upload: ${filename}`,
       content: this.arrayBufferToBase64(imageData),
@@ -131,8 +136,46 @@ class GitHubAPI {
     });
   }
 
+  async uploadLargeFile(path, filename, imageData) {
+    const base64Content = this.arrayBufferToBase64(imageData);
+
+    const blob = await this.request('POST', `/repos/${this.owner}/${this.privateRepo}/git/blobs`, {
+      content: base64Content,
+      encoding: 'base64'
+    });
+
+    const ref = await this.request('GET', `/repos/${this.owner}/${this.privateRepo}/git/refs/heads/main`);
+    const commitSha = ref.object.sha;
+
+    const commit = await this.request('GET', `/repos/${this.owner}/${this.privateRepo}/git/commits/${commitSha}`);
+    const baseTreeSha = commit.tree.sha;
+
+    const newTree = await this.request('POST', `/repos/${this.owner}/${this.privateRepo}/git/trees`, {
+      base_tree: baseTreeSha,
+      tree: [
+        {
+          path,
+          mode: '100644',
+          type: 'blob',
+          sha: blob.sha
+        }
+      ]
+    });
+
+    const newCommit = await this.request('POST', `/repos/${this.owner}/${this.privateRepo}/git/commits`, {
+      message: `Upload: ${filename}`,
+      tree: newTree.sha,
+      parents: [commitSha]
+    });
+
+    return this.request('PATCH', `/repos/${this.owner}/${this.privateRepo}/git/refs/heads/main`, {
+      sha: newCommit.sha,
+      force: false
+    });
+  }
+
   async deleteFile(path, sha) {
-    return this.request('DELETE', `/repos/${this.owner}/${this.privateRepo}/contents/${encodeURIComponent(path)}`, {
+    return this.request('DELETE', `/repos/${this.owner}/${this.privateRepo}/contents/${path}`, {
       message: `Delete: ${path.split('/').pop()}`,
       sha,
       branch: 'main'
@@ -177,6 +220,20 @@ class GitHubAPI {
     const path = `albums/${encodeURIComponent(albumName)}/${encodeURIComponent(filename)}`;
     const blob = await this.getFileBlob(path);
     return URL.createObjectURL(blob);
+  }
+
+  async getMediaDataUrl(albumName, filename) {
+    const path = `albums/${encodeURIComponent(albumName)}/${encodeURIComponent(filename)}`;
+    const blob = await this.getFileBlob(path);
+    const ext = filename.split('.').pop().toLowerCase();
+    const mimeTypes = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml' };
+    const mime = mimeTypes[ext] || 'application/octet-stream';
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
   }
 
   arrayBufferToBase64(buffer) {

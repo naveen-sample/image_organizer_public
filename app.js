@@ -115,6 +115,22 @@ class GalleryApp {
     });
 
     document.addEventListener('click', (e) => {
+      const link = e.target.closest('[data-action]');
+      if (link && link.dataset.action) {
+        const action = link.dataset.action;
+        if (this.state.ui.mobileMenuOpen) this.toggleMobileMenu();
+        switch (action) {
+          case 'home':
+            this.showHomeScreen();
+            return;
+          case 'logout':
+            this.logout();
+            return;
+        }
+      }
+    });
+
+    document.addEventListener('click', (e) => {
       const btn = e.target.closest('[id]');
       if (!btn) return;
       const id = btn.id;
@@ -127,6 +143,8 @@ class GalleryApp {
           this.showLearnMore();
           break;
         case 'menuBtn':
+        case 'closeMenuBtn':
+        case 'mobileMenuOverlay':
           this.toggleMobileMenu();
           break;
         case 'themeBtn':
@@ -137,6 +155,7 @@ class GalleryApp {
           break;
         case 'refreshBtn':
         case 'refreshHomeBtn':
+        case 'refreshAlbumBtn':
           this.refreshCurrentScreen();
           break;
         case 'backToHomeBtn':
@@ -180,6 +199,14 @@ class GalleryApp {
           break;
         case 'resetSettingsBtn':
           this.resetSettings();
+          break;
+        case 'confirmActionBtn':
+          {
+            const dialog = document.getElementById('confirmDialog');
+            if (dialog && dialog._onConfirm) {
+              dialog._onConfirm();
+            }
+          }
           break;
         case 'cancelConfirmBtn':
           document.getElementById('confirmDialog')?.close();
@@ -295,13 +322,17 @@ class GalleryApp {
           path: album.path,
           lastUpdated: album.updated_at || new Date().toISOString(),
           mediaCount: cached ? (cached.mediaCount || cached.imageCount || 0) : 0,
-          sha: album.sha
+          sha: album.sha,
+          thumbnailUrl: null
         };
       });
 
       this.state.albums.all = albumData;
-      this.state.albums.loading = false;
 
+      UI.showLoading(screen, 'Loading previews...');
+      await this.loadAlbumThumbnails();
+
+      this.state.albums.loading = false;
       Storage.CacheManager.set('albums', albumData, CONFIG.cache.albumsTTL);
       UI.renderHomeScreen(albumData);
 
@@ -418,6 +449,21 @@ class GalleryApp {
     });
   }
 
+  async loadAlbumThumbnails() {
+    const promises = this.state.albums.all.map(async (album) => {
+      try {
+        const media = await this.api.listMedia(album.name);
+        if (media.length === 0) return;
+        const first = media[0];
+        if (Utils.isVideoFile(first.name)) return;
+        album.thumbnailUrl = await this.api.getMediaDataUrl(album.name, first.name);
+      } catch (e) {
+        console.warn(`Thumbnail failed for ${album.name}:`, e);
+      }
+    });
+    await Promise.all(promises);
+  }
+
   showLightbox(mediaIndex) {
     const mediaItems = this.state.media.all;
     if (!mediaItems || mediaItems.length === 0) return;
@@ -519,23 +565,23 @@ class GalleryApp {
     if (!item) return;
 
     UI.showConfirmDialog(`Delete "${item.name}"? This cannot be undone.`, async () => {
-      try {
-        document.getElementById('confirmDialog')?.close();
-        await this.api.deleteImage(this.state.albums.selected, item.name, item.sha);
-        this.state.media.all.splice(this.state.media.selected, 1);
-        UI.Notify.success(`Deleted ${item.name}`);
+      document.getElementById('confirmDialog')?.close();
+      UI.showLoaderOverlay('Deleting...');
 
-        if (this.state.media.all.length === 0) {
-          this.closeLightbox();
-          await this.showAlbum(this.state.albums.selected);
-        } else if (this.state.media.selected >= this.state.media.all.length) {
-          this.showLightbox(this.state.media.all.length - 1);
-        } else {
-          this.showLightbox(this.state.media.selected);
-        }
+      try {
+        await this.api.deleteImage(this.state.albums.selected, item.name, item.sha);
       } catch (error) {
+        UI.hideLoaderOverlay();
         UI.Notify.error(error.message || 'Failed to delete file');
+        return;
       }
+
+      setTimeout(() => {
+        UI.hideLoaderOverlay();
+        this.revokeMediaBlobUrls();
+        this.closeLightbox();
+        this.showAlbum(this.state.albums.selected);
+      }, 60000);
     });
   }
 
@@ -758,12 +804,12 @@ class GalleryApp {
     }
   }
 
-  toggleMobileMenu() {
-    this.state.ui.mobileMenuOpen = !this.state.ui.mobileMenuOpen;
+  toggleMobileMenu(forceClose) {
+    this.state.ui.mobileMenuOpen = forceClose !== undefined ? !forceClose : !this.state.ui.mobileMenuOpen;
     const menu = document.getElementById('mobileMenu');
     if (menu) {
-      menu.classList.toggle('open');
-      document.body.classList.toggle('mobile-menu-open');
+      menu.classList.toggle('open', this.state.ui.mobileMenuOpen);
+      document.body.classList.toggle('mobile-menu-open', this.state.ui.mobileMenuOpen);
     }
   }
 

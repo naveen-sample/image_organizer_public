@@ -27,8 +27,6 @@ const Storage = {
 
   setToken(token) {
     localStorage.setItem('gh_token', token);
-    localStorage.setItem('gh_token_created', Date.now().toString());
-    localStorage.setItem('gh_token_expires', (Date.now() + 3600000).toString());
   },
 
   clearToken() {

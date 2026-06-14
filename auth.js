@@ -1,15 +1,6 @@
 const Auth = {
   isLoggedIn() {
-    const token = Storage.getToken();
-    if (!token) return false;
-
-    const expiry = parseInt(localStorage.getItem('gh_token_expires'));
-    if (Date.now() > expiry) {
-      this.logout();
-      return false;
-    }
-
-    return true;
+    return !!Storage.getToken();
   },
 
   async validateToken(token) {

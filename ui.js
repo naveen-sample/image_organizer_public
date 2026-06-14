@@ -13,6 +13,29 @@ const UI = {
     container.innerHTML = `<div class="error"><p>${Utils.escapeHtml(message)}</p></div>`;
   },
 
+  showLoaderOverlay(message) {
+    let overlay = document.getElementById('loaderOverlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'loaderOverlay';
+      overlay.className = 'loader-overlay';
+      overlay.innerHTML = `
+        <div class="loader-overlay__content">
+          <div class="loading__spinner"></div>
+          <p class="loader-overlay__text"></p>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+    }
+    overlay.querySelector('.loader-overlay__text').textContent = message || 'Processing...';
+    overlay.classList.add('visible');
+  },
+
+  hideLoaderOverlay() {
+    const overlay = document.getElementById('loaderOverlay');
+    if (overlay) overlay.classList.remove('visible');
+  },
+
   renderLoginScreen() {
     const screen = document.getElementById('loginScreen');
     screen.innerHTML = `
@@ -70,14 +93,19 @@ const UI = {
         </div>
       ` : `
         <div class="grid grid--albums">
-          ${albums.map(album => `
-            <div class="card album-card" data-album="${album.name.replace(/"/g, '&quot;')}">
-              <div class="card__image-placeholder">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="1.5">
-                  <rect x="3" y="3" width="18" height="18" rx="2"/>
-                  <circle cx="8.5" cy="8.5" r="1.5"/>
-                  <path d="M21 15l-5-5L5 21"/>
-                </svg>
+          ${albums.map((album, idx) => `
+            <div class="card album-card" data-album="${album.name.replace(/"/g, '&quot;')}" data-index="${idx}">
+              <div class="card__image-wrapper">
+                <div class="card__image-placeholder">
+                  ${album.thumbnailUrl
+                    ? `<img src="${album.thumbnailUrl}" alt="" class="card__thumbnail">`
+                    : `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="1.5">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <path d="M21 15l-5-5L5 21"/>
+                      </svg>`
+                  }
+                </div>
               </div>
               <h3 class="card__title">${Utils.escapeHtml(album.displayName || Utils.formatAlbumName(album.name))}</h3>
               <div class="card__meta">
@@ -111,6 +139,10 @@ const UI = {
         </button>
         <h2>${Utils.escapeHtml(Utils.formatAlbumName(albumName))}</h2>
         <span class="screen-header__count">${media.length} ${Utils.pluralize(media.length, 'file')}</span>
+        <button class="btn btn--secondary" id="refreshAlbumBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+          Refresh
+        </button>
       </div>
 
       ${media.length === 0 ? `
@@ -302,7 +334,6 @@ const UI = {
   showConfirmDialog(message, onConfirm) {
     const dialog = document.getElementById('confirmDialog');
     dialog.innerHTML = `
-      <div class="modal__overlay"></div>
       <div class="modal__content modal__content--small">
         <div class="confirm-dialog">
           <p>${Utils.escapeHtml(message)}</p>
@@ -313,6 +344,7 @@ const UI = {
         </div>
       </div>
     `;
+    dialog._onConfirm = onConfirm;
     dialog.showModal();
   },
 
