@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="description" content="Your GitHub-powered image gallery">
+  <meta name="theme-color" content="#007AFF">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta property="og:title" content="Gallery | Photo Manager">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="./assets/logo.svg">
+
+  <title>Gallery | Photo Manager</title>
+  <link rel="icon" type="image/svg+xml" href="./assets/logo.svg">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <!-- HEADER -->
+  <header id="header" class="header header--hidden">
+    <div class="header__container">
+      <div class="header__left">
+        <button id="menuBtn" class="header__menu-btn" aria-label="Menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+        <h1 class="header__title">Naveen Photo Organizer</h1>
+      </div>
+
+      <div class="header__center">
+        <input type="search" id="globalSearch" class="header__search"
+               placeholder="Search albums & images..." aria-label="Search">
+      </div>
+
+      <div class="header__right">
+        <button id="uploadBtn" class="header__icon-btn" aria-label="Upload">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+          </svg>
+        </button>
+        <button id="themeBtn" class="header__icon-btn" aria-label="Toggle theme">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MOBILE MENU -->
+  <nav id="mobileMenu" class="mobile-menu" aria-label="Navigation">
+    <div class="mobile-menu__content">
+      <ul class="mobile-menu__list">
+        <li><a href="#" class="mobile-menu__link" data-action="home">Home</a></li>
+        <li><a href="#" class="mobile-menu__link" data-action="about">About</a></li>
+        <li><a href="#" class="mobile-menu__link" data-action="logout">Logout</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <main id="main" class="main">
+    <section id="loginScreen" class="screen screen--login"></section>
+    <section id="homeScreen" class="screen screen--home hidden"></section>
+    <section id="albumScreen" class="screen screen--album hidden"></section>
+    <section id="lightboxScreen" class="screen screen--lightbox hidden"></section>
+  </main>
+
+  <!-- MODALS -->
+  <dialog id="uploadModal" class="modal modal--upload"></dialog>
+  <dialog id="confirmDialog" class="modal modal--confirm">
+    <div class="modal__content modal__content--small"></div>
+  </dialog>
+
+  <!-- NOTIFICATIONS -->
+  <div id="notificationContainer" class="notification-container"></div>
+
+  <!-- SCRIPT MODULES -->
+  <script src="./config.js"></script>
+  <script src="./utils.js"></script>
+  <script src="./storage.js"></script>
+  <script src="./auth.js"></script>
+  <script src="./api.js"></script>
+  <script src="./ui.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
